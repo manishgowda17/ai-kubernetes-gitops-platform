@@ -1,0 +1,8 @@
+<<<<<<< HEAD
+=======
+venv/
+__pycache__/
+*.pyc
+.envvenv/
+.env
+>>>>>>> 7abf783 (updated ai-engine)
