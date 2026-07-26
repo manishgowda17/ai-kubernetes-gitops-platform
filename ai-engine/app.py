@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from analyzers.docker_analyzer import DockerAnalyzer
 from analyzers.kubernetes_analyzer import KubernetesAnalyzer
 from analyzers.helm_analyzer import HelmAnalyzer
+from analyzers.jenkins_analyzer import JenkinsAnalyzer
 
 app = FastAPI(
     title="AI Platform Engineering Copilot",
@@ -46,3 +47,9 @@ def analyze_helm():
     analyzer = HelmAnalyzer()
 
     return analyzer.analyze("../ai-platform")
+@app.post("/analyze/jenkins")
+def analyze_jenkins():
+
+    analyzer = JenkinsAnalyzer()
+
+    return analyzer.analyze("../Jenkinsfile")
