@@ -1,38 +1,64 @@
 apiVersion: apps/v1
-
 kind: Deployment
 
 metadata:
   name: ai-platform
-
   namespace: ai-platform
 
 spec:
-
   replicas: 2
 
   selector:
-
     matchLabels:
-
       app: ai-platform
 
   template:
-
     metadata:
-
       labels:
-
         app: ai-platform
 
     spec:
-
       containers:
-
       - name: ai-platform
 
-        image: nginx:latest
+        image: ai-devops-platform:latest
+        imagePullPolicy: IfNotPresent
 
         ports:
+        - containerPort: 8000
 
-        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: ai-platform-config
+
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gemini-secret
+              key: GEMINI_API_KEY
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+
+          initialDelaySeconds: 15
+          periodSeconds: 20

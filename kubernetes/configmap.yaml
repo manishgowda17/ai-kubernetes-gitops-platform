@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: ai-platform-config
+  namespace: ai-platform
+
+data:
+  APP_NAME: "AI Platform Engineering Copilot"
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+  REPOSITORY_PATH: "/workspace"
