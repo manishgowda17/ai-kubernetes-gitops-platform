@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .envvenv/
 .env
+ai-engine/.env
+ai-engine/venv/

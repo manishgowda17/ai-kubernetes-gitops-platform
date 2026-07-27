@@ -1,33 +1,24 @@
-from services.gemini_service import GeminiService
+from pathlib import Path
+
+from analyzers.base_analyzer import BaseAnalyzer
 from prompts.jenkins_prompt import JENKINS_ANALYSIS_PROMPT
-from utils.jenkins_loader import JenkinsLoader
-from utils.json_parser import JSONParser
 
 
-class JenkinsAnalyzer:
+class JenkinsAnalyzer(BaseAnalyzer):
 
     def __init__(self):
-        self.ai = GeminiService()
+        super().__init__()
 
-    def analyze(self, pipeline_path):
+    def analyze(self, jenkinsfile_path):
 
-        loader = JenkinsLoader(pipeline_path)
-
-        pipeline = loader.load_pipeline()
+        jenkinsfile = Path(jenkinsfile_path).read_text()
 
         prompt = f"""
 {JENKINS_ANALYSIS_PROMPT}
 
-Jenkins Pipeline:
+Jenkinsfile
 
-Filename:
-{pipeline['filename']}
-
-Pipeline:
-
-{pipeline['content']}
+{jenkinsfile}
 """
 
-        response = self.ai.generate_response(prompt)
-
-        return JSONParser.parse(response)
+        return self.ask_ai(prompt)

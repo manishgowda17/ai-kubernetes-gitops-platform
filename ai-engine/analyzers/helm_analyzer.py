@@ -1,45 +1,31 @@
-from services.gemini_service import GeminiService
+from pathlib import Path
+
+from analyzers.base_analyzer import BaseAnalyzer
 from prompts.helm_prompt import HELM_ANALYSIS_PROMPT
-from utils.helm_loader import HelmLoader
-from utils.json_parser import JSONParser
 
 
-class HelmAnalyzer:
+class HelmAnalyzer(BaseAnalyzer):
 
     def __init__(self):
-        self.ai = GeminiService()
+        super().__init__()
 
-    def analyze(self, chart_directory):
+    def analyze(self, helm_path):
 
-        loader = HelmLoader(chart_directory)
+        chart = ""
 
-        files = loader.load_chart()
+        for file in Path(helm_path).rglob("*"):
 
-        combined_chart = ""
+            if file.is_file():
 
-        for file in files:
-
-            combined_chart += f"""
-
-File:
-{file['filename']}
-
-Content:
-
-{file['content']}
-
-------------------------------------
-
-"""
+                chart += f"\n\n# File: {file.relative_to(helm_path)}\n"
+                chart += file.read_text()
 
         prompt = f"""
 {HELM_ANALYSIS_PROMPT}
 
-Helm Chart:
+Helm Chart
 
-{combined_chart}
+{chart}
 """
 
-        response = self.ai.generate_response(prompt)
-
-        return JSONParser.parse(response)
+        return self.ask_ai(prompt)

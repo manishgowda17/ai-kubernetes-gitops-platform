@@ -1,46 +1,28 @@
-from services.gemini_service import GeminiService
+from pathlib import Path
+
+from analyzers.base_analyzer import BaseAnalyzer
 from prompts.kubernetes_prompt import KUBERNETES_ANALYSIS_PROMPT
-from utils.kubernetes_loader import KubernetesLoader
-from utils.json_parser import JSONParser
 
 
-class KubernetesAnalyzer:
+class KubernetesAnalyzer(BaseAnalyzer):
 
     def __init__(self):
-        self.ai = GeminiService()
+        super().__init__()
 
-    def analyze(self, directory):
+    def analyze(self, kubernetes_path):
 
-        loader = KubernetesLoader(directory)
+        manifests = ""
 
-        manifests = loader.load_manifests()
-
-        combined_yaml = ""
-
-        for manifest in manifests:
-
-            combined_yaml += f"""
-
-File: {manifest['filename']}
-
-Kind: {manifest['kind']}
-
-Content:
-
-{manifest['content']}
-
-------------------------------------
-
-"""
+        for file in Path(kubernetes_path).glob("*.yaml"):
+            manifests += f"\n\n# File: {file.name}\n"
+            manifests += file.read_text()
 
         prompt = f"""
 {KUBERNETES_ANALYSIS_PROMPT}
 
-Kubernetes Manifests:
+Kubernetes Manifests
 
-{combined_yaml}
+{manifests}
 """
 
-        response = self.ai.generate_response(prompt)
-
-        return JSONParser.parse(response)
+        return self.ask_ai(prompt)

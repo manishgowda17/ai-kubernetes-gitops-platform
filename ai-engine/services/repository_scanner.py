@@ -2,45 +2,43 @@ from pathlib import Path
 
 
 class RepositoryScanner:
-    """
-    Scans the repository and detects DevOps-related files.
-    """
 
-    def __init__(self, repo_path: str):
-        self.repo_path = Path(repo_path)
+    def __init__(self, repo_path):
+        self.repo = Path(repo_path)
 
     def scan(self):
+
         detected = {
-            "docker": [],
-            "kubernetes": [],
-            "helm": [],
-            "jenkins": []
+            "docker": None,
+            "kubernetes": None,
+            "helm": None,
+            "jenkins": None,
+            "terraform":None,
         }
 
-        for file in self.repo_path.rglob("*"):
+        docker = self.repo / "Dockerfile"
 
-            if not file.is_file():
-                continue
+        if docker.exists():
+            detected["docker"] = docker
 
-            name = file.name.lower()
+        kubernetes = self.repo / "kubernetes"
 
-            # Docker
-            if name == "dockerfile":
-                detected["docker"].append(str(file))
+        if kubernetes.exists():
+            detected["kubernetes"] = kubernetes
 
-            elif name in ("docker-compose.yml", "docker-compose.yaml"):
-                detected["docker"].append(str(file))
+        helm = self.repo / "ai-platform"
 
-            # Kubernetes
-            elif file.suffix in (".yaml", ".yml") and "kubernetes" in str(file):
-                detected["kubernetes"].append(str(file))
+        if helm.exists():
+            detected["helm"] = helm
 
-            # Helm
-            elif "ai-platform" in str(file):
-                detected["helm"].append(str(file))
+        jenkins = self.repo / "Jenkinsfile"
 
-            # Jenkins
-            elif name == "jenkinsfile":
-                detected["jenkins"].append(str(file))
+        if jenkins.exists():
+            detected["jenkins"] = jenkins
+
+        terraform = self.repo / "terraform"
+
+        if terraform.exists():
+            detected["terraform"] = terraform
 
         return detected
