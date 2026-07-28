@@ -1,0 +1,11 @@
+aws_region    = "ap-south-1"
+
+project_name  = "ai-platform"
+
+environment   = "dev"
+
+instance_type = "t2.micro"
+
+key_name      = "your-keypair-name"
+
+bucket_name   = "your-unique-bucket-name"

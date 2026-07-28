@@ -5,3 +5,4 @@ __pycache__/
 .env
 ai-engine/.env
 ai-engine/venv/
+terraform/terraform.tfvars
