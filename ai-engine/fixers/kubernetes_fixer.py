@@ -1,22 +1,18 @@
-from pathlib import Path
-
 from fixers.base_fixer import BaseFixer
 from prompts.kubernetes_fix_prompt import KUBERNETES_FIX_PROMPT
+from services.file_service import FileService
 
 
 class KubernetesFixer(BaseFixer):
 
     def fix(self, kubernetes_folder):
 
-        yaml = ""
+        fixed = self.fix_file(
+            kubernetes_folder,
+            KUBERNETES_FIX_PROMPT
+        )
 
-        for file in Path(kubernetes_folder).glob("*.yaml"):
-            yaml += file.read_text() + "\n\n"
-
-        prompt = f"""
-{KUBERNETES_FIX_PROMPT}
-
-{yaml}
-"""
-
-        return self.ai.generate_response(prompt)
+        return FileService.save(
+            "deployment.fixed.yaml",
+            fixed
+        )

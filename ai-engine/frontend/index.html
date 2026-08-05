@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Platform Engineering Copilot</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <header>
+
+        <h1>🚀 AI Platform Engineering Copilot</h1>
+
+        <p>Analyze • Fix • Optimize Infrastructure</p>
+
+    </header>
+
+
+    <div class="repository-card">
+
+        <h2>Repository</h2>
+
+        <input
+             id="repo-url"
+             type="text"
+             placeholder="Paste GitHub Repository URL">
+            readonly>
+
+        <button id="analyze-btn">
+
+            Analyze Repository
+
+        </button>
+
+    </div>
+
+
+    <div id="dashboard" class="hidden">
+
+        <div class="score-card">
+
+            <h2>Infrastructure Health</h2>
+
+            <h1 id="overall-score">--</h1>
+
+            <p id="health-status">Waiting for Analysis</p>
+
+        </div>
+
+
+
+        <div class="cards">
+
+            <div class="card">
+
+                <h3>🐳 Docker</h3>
+
+                <h2 id="docker-score">--</h2>
+
+            </div>
+
+            <div class="card">
+
+                <h3>🌍 Terraform</h3>
+
+                <h2 id="terraform-score">--</h2>
+
+            </div>
+
+            <div class="card">
+
+                <h3>☸ Kubernetes</h3>
+
+                <h2 id="kubernetes-score">--</h2>
+
+            </div>
+
+            <div class="card">
+
+                <h3>⚓ Helm</h3>
+
+                <h2 id="helm-score">--</h2>
+
+            </div>
+
+            <div class="card">
+
+                <h3>⚙ Jenkins</h3>
+
+                <h2 id="jenkins-score">--</h2>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="summary-card">
+
+            <h2>Repository Summary</h2>
+
+            <ul id="summary-list">
+
+            </ul>
+
+        </div>
+
+
+
+        <div class="recommendation-card">
+
+            <h2>AI Recommendations</h2>
+
+            <ul id="recommendation-list">
+
+            </ul>
+
+        </div>
+
+
+        <div class="buttons">
+
+            <button id="fix-btn">
+
+                Generate AI Fixes
+
+            </button>
+
+            <button id="download-btn">
+
+                Download Fixed Repository
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+
+</html>
+</button>
+<div id="loader" class="loader">
+
+⏳ Analyzing Repository...
+
+</div>

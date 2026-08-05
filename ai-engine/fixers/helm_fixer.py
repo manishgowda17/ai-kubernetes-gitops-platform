@@ -1,27 +1,18 @@
-from pathlib import Path
-
-from services.gemini_service import GeminiService
+from fixers.base_fixer import BaseFixer
 from prompts.helm_fix_prompt import HELM_FIX_PROMPT
+from services.file_service import FileService
 
 
-class HelmFixer:
-
-    def __init__(self):
-        self.ai = GeminiService()
+class HelmFixer(BaseFixer):
 
     def fix(self, helm_folder):
 
-        chart = ""
+        fixed = self.fix_file(
+            helm_folder,
+            HELM_FIX_PROMPT
+        )
 
-        for file in Path(helm_folder).rglob("*"):
-
-            if file.is_file():
-                chart += file.read_text() + "\n\n"
-
-        prompt = f"""
-{HELM_FIX_PROMPT}
-
-{chart}
-"""
-
-        return self.ai.generate_response(prompt)
+        return FileService.save(
+            "helm.fixed.yaml",
+            fixed
+        )

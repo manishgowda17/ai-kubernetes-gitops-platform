@@ -1,25 +1,20 @@
-from pathlib import Path
-
-from services.gemini_service import GeminiService
+from fixers.base_fixer import BaseFixer
 from prompts.terraform_fix_prompt import TERRAFORM_FIX_PROMPT
+from services.file_service import FileService
 
 
-class TerraformFixer:
-
-    def __init__(self):
-        self.ai = GeminiService()
+class TerraformFixer(BaseFixer):
 
     def fix(self, terraform_folder):
 
-        tf = ""
+        fixed = self.fix_file(
+            terraform_folder,
+            TERRAFORM_FIX_PROMPT
+        )
 
-        for file in Path(terraform_folder).glob("*.tf"):
-            tf += file.read_text() + "\n\n"
+        filename = FileService.save(
+            "main.fixed.tf",
+            fixed
+        )
 
-        prompt = f"""
-{TERRAFORM_FIX_PROMPT}
-
-{tf}
-"""
-
-        return self.ai.generate_response(prompt)
+        return filename

@@ -1,0 +1,128 @@
+pipeline {
+    agent {
+        docker {
+            image 'node:20-alpine'
+            args '-v /tmp/npm-cache:/root/.npm'
+        }
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+        timeout(time: 1, unit: 'HOURS')
+        ansiColor('xterm')
+        timestamps()
+    }
+
+    environment {
+        APP_NAME = 'my-app'
+        SCANNER_HOME = tool 'SonarScanner'
+        NPM_CONFIG_CACHE = '/root/.npm'
+        IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+        REGISTRY_CREDS = credentials('docker-registry-credentials')
+        SONAR_TOKEN = credentials('sonar-auth-token')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                cleanWs()
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm ci --prefer-offline --no-audit'
+            }
+        }
+
+        stage('Parallel Quality & Security Scans') {
+            failFast true
+            parallel {
+                stage('Lint') {
+                    steps {
+                        sh 'npm run lint'
+                    }
+                }
+                stage('Unit Tests') {
+                    steps {
+                        sh 'npm test -- --coverage'
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: '**/test-results.xml'
+                        }
+                    }
+                }
+                stage('Dependency Security Scan') {
+                    steps {
+                        sh 'npm audit --audit-level=high'
+                    }
+                }
+                stage('SonarQube Code Analysis') {
+                    steps {
+                        withSonarQubeEnv('SonarQube') {
+                            sh '''
+                                ${SCANNER_HOME}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=${APP_NAME} \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.login=${SONAR_TOKEN}
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build Container Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-registry-credentials') {
+                        def appImage = docker.build("${APP_NAME}:${IMAGE_TAG}", "--cache-from ${APP_NAME}:latest .")
+                        appImage.push()
+                        appImage.push('latest')
+                    }
+                }
+            }
+        }
+
+        stage('Container Vulnerability Scan') {
+            steps {
+                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${APP_NAME}:${IMAGE_TAG}"
+            }
+        }
+
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+            }
+            steps {
+                retry(3) {
+                    sh "kubectl set image deployment/${APP_NAME} ${APP_NAME}=${APP_NAME}:${IMAGE_TAG} -n staging"
+                    sh "kubectl rollout status deployment/${APP_NAME} -n staging"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs(deleteDirs: true, notFailBuild: true)
+        }
+        success {
+            slackSend channel: '#ci-cd-notifications', color: 'good', message: "SUCCESSFUL: Job '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
+        }
+        failure {
+            slackSend channel: '#ci-cd-notifications', color: 'danger', message: "FAILED: Job '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
+        }
+    }
+}
