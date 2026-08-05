@@ -21,13 +21,49 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.repository_service import RepositoryService
 from analyzers.repository_analyzer import RepositoryAnalyzer
 
+from analyzers.monitoring_analyzer import MonitoringAnalyzer
+
 app = FastAPI(
     title="AI Platform Engineering Copilot",
     version="1.0.0",
     description="AI-powered DevOps Analyzer And Fixer"
 )
+import time
+
+from fastapi import Request
+from fastapi.responses import Response
+
+from prometheus_client import (
+    generate_latest,
+    CONTENT_TYPE_LATEST
+)
+
+from services.metrics import (
+    REQUEST_COUNT,
+    REQUEST_LATENCY
+)
 
 app = FastAPI()
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+
+    start = time.time()
+
+    response = await call_next(request)
+
+    duration = time.time() - start
+
+    REQUEST_COUNT.labels(
+        request.method,
+        request.url.path
+    ).inc()
+
+    REQUEST_LATENCY.labels(
+        request.method,
+        request.url.path
+    ).observe(duration)
+
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -205,3 +241,34 @@ def fix_all():
     return {
         "message": "All fixes generated successfully"
     }
+@app.get("/")
+def home():
+    return {"message": "Hello"}
+
+@app.post("/analyze/repository")
+def analyze_repository():
+    ...
+
+@app.post("/fix/docker")
+def fix_docker():
+    ...
+
+@app.get("/metrics")
+def metrics():
+
+    return Response(
+        generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+@app.get("/analyze/monitoring")
+def analyze_monitoring():
+
+    analyzer = MonitoringAnalyzer()
+
+    return analyzer.analyze(@app.get("/incident/report")
+def incident_report():
+
+    analyzer = MonitoringAnalyzer()
+
+    return analyzer.analyze()
+
