@@ -1,103 +1,124 @@
 pipeline {
     agent {
-        docker {
-            image 'node:20-alpine'
-            args '-v /tmp/npm-cache:/root/.npm'
-        }
+        label 'docker-runner'
     }
 
     options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        disableConcurrentBuilds()
         timeout(time: 1, unit: 'HOURS')
-        ansiColor('xterm')
+        retry(2)
         timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '5'))
     }
 
     environment {
-        APP_NAME = 'my-app'
-        SCANNER_HOME = tool 'SonarScanner'
-        NPM_CONFIG_CACHE = '/root/.npm'
-        IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
-        REGISTRY_CREDS = credentials('docker-registry-credentials')
-        SONAR_TOKEN = credentials('sonar-auth-token')
+        APP_NAME                = 'app-service'
+        REGISTRY_HOST           = 'registry.company.com'
+        IMAGE_NAME              = "${REGISTRY_HOST}/${APP_NAME}"
+        IMAGE_TAG               = "${BUILD_NUMBER}-${GIT_COMMIT[0..7]}"
+        DOCKER_BUILDKIT         = '1'
+        REGISTRY_CREDENTIALS_ID = 'docker-registry-credentials'
+        SONAR_TOKEN             = credentials('sonar-auth-token')
+        KUBECONFIG_CRED_ID      = 'k8s-cluster-credentials'
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout & Environment Setup') {
             steps {
-                cleanWs()
                 checkout scm
+                sh 'git config --global --add safe.directory *'
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm ci --prefer-offline --no-audit'
-            }
-        }
-
-        stage('Parallel Quality & Security Scans') {
-            failFast true
+        stage('Parallel Analysis & Verification') {
             parallel {
-                stage('Lint') {
+                stage('Code Linting') {
                     steps {
-                        sh 'npm run lint'
+                        sh '''
+                            docker run --rm \
+                                -v "$PWD":/app -w /app \
+                                -v /tmp/npm-cache:/root/.npm \
+                                node:20-alpine npm ci && npm run lint
+                        '''
                     }
                 }
-                stage('Unit Tests') {
+
+                stage('Unit Testing & Coverage') {
                     steps {
-                        sh 'npm test -- --coverage'
-                    }
-                    post {
-                        always {
-                            junit allowEmptyResults: true, testResults: '**/test-results.xml'
-                        }
-                    }
-                }
-                stage('Dependency Security Scan') {
-                    steps {
-                        sh 'npm audit --audit-level=high'
-                    }
-                }
-                stage('SonarQube Code Analysis') {
-                    steps {
-                        withSonarQubeEnv('SonarQube') {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             sh '''
-                                ${SCANNER_HOME}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=${APP_NAME} \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.login=${SONAR_TOKEN}
+                                docker run --rm \
+                                    -v "$PWD":/app -w /app \
+                                    -v /tmp/npm-cache:/root/.npm \
+                                    node:20-alpine npm ci && npm run test:unit -- --coverage
                             '''
                         }
                     }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: '**/junit.xml'
+                            publishCoverage adapters: [istanbulSonarAdapter('coverage/clover.xml')], calculateDiffForChange: true
+                        }
+                    }
                 }
-            }
-        }
 
-        stage('SonarQube Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Build Container Image') {
-            steps {
-                script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-registry-credentials') {
-                        def appImage = docker.build("${APP_NAME}:${IMAGE_TAG}", "--cache-from ${APP_NAME}:latest .")
-                        appImage.push()
-                        appImage.push('latest')
+                stage('SAST & SonarQube Analysis') {
+                    steps {
+                        script {
+                            def scannerHome = tool 'SonarScanner'
+                            withSonarQubeEnv('SonarQubeServer') {
+                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${APP_NAME} -Dsonar.sources=."
+                            }
+                        }
                     }
                 }
             }
         }
 
-        stage('Container Vulnerability Scan') {
+        stage('Container Build & Security Scan') {
+            stages {
+                stage('Build OCI Image') {
+                    steps {
+                        script {
+                            docker.withRegistry("https://${REGISTRY_HOST}", REGISTRY_CREDENTIALS_ID) {
+                                sh """
+                                    docker buildx build \
+                                        --cache-from type=registry,ref=${IMAGE_NAME}:buildcache \
+                                        --cache-to type=registry,ref=${IMAGE_NAME}:buildcache,mode=max \
+                                        --build-arg BUILDKIT_INLINE_CACHE=1 \
+                                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                                        -t ${IMAGE_NAME}:latest \
+                                        --load .
+                                """
+                            }
+                        }
+                    }
+                }
+
+                stage('Container Vulnerability Scan') {
+                    steps {
+                        sh """
+                            trivy image \
+                                --exit-code 1 \
+                                --severity HIGH,CRITICAL \
+                                --ignore-unfixed \
+                                ${IMAGE_NAME}:${IMAGE_TAG}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Publish Artifacts') {
             steps {
-                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${APP_NAME}:${IMAGE_TAG}"
+                script {
+                    docker.withRegistry("https://${REGISTRY_HOST}", REGISTRY_CREDENTIALS_ID) {
+                        sh """
+                            docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                            docker push ${IMAGE_NAME}:latest
+                        """
+                    }
+                }
             }
         }
 
@@ -106,9 +127,29 @@ pipeline {
                 branch 'main'
             }
             steps {
-                retry(3) {
-                    sh "kubectl set image deployment/${APP_NAME} ${APP_NAME}=${APP_NAME}:${IMAGE_TAG} -n staging"
-                    sh "kubectl rollout status deployment/${APP_NAME} -n staging"
+                withKubeConfig(credentialsId: KUBECONFIG_CRED_ID) {
+                    sh """
+                        kubectl set image deployment/${APP_NAME} ${APP_NAME}=${IMAGE_NAME}:${IMAGE_TAG} -n staging
+                        kubectl rollout status deployment/${APP_NAME} -n staging --timeout=300s
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            when {
+                buildingTag()
+            }
+            options {
+                timeout(time: 15, unit: 'MINUTES')
+            }
+            steps {
+                input message: "Approve deployment to Production?", ok: "Deploy"
+                withKubeConfig(credentialsId: KUBECONFIG_CRED_ID) {
+                    sh """
+                        kubectl set image deployment/${APP_NAME} ${APP_NAME}=${IMAGE_NAME}:${IMAGE_TAG} -n production
+                        kubectl rollout status deployment/${APP_NAME} -n production --timeout=300s
+                    """
                 }
             }
         }
@@ -116,13 +157,14 @@ pipeline {
 
     post {
         always {
-            cleanWs(deleteDirs: true, notFailBuild: true)
+            cleanWs deleteDirs: true, notFailBuild: true
+            sh 'docker image prune -f --filter "until=24h"'
         }
         success {
-            slackSend channel: '#ci-cd-notifications', color: 'good', message: "SUCCESSFUL: Job '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
+            slackSend channel: '#deployments', color: '#00FF00', message: "SUCCESSFUL: Pipeline '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
         }
         failure {
-            slackSend channel: '#ci-cd-notifications', color: 'danger', message: "FAILED: Job '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
+            slackSend channel: '#deployments', color: '#FF0000', message: "FAILED: Pipeline '${env.JOB_NAME}' [Build #${env.BUILD_NUMBER}]"
         }
     }
 }

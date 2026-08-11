@@ -1,0 +1,166 @@
+const API_URL = "http://localhost:8000";
+
+const repoUrl = document.getElementById("repoUrl");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const statusText = document.getElementById("status");
+const result = document.getElementById("result");
+const overallScore = document.getElementById("overallScore");
+const components = document.getElementById("components");
+
+
+analyzeBtn.addEventListener("click", analyzeRepository);
+
+
+async function analyzeRepository() {
+
+    const url = repoUrl.value.trim();
+
+    if (!url) {
+        statusText.textContent = "Please enter a GitHub repository URL.";
+        return;
+    }
+
+    if (!url.startsWith("https://github.com/")) {
+        statusText.textContent =
+            "Please enter a valid GitHub repository URL.";
+
+        return;
+    }
+
+    analyzeBtn.disabled = true;
+
+    statusText.textContent = "Analyzing repository...";
+
+    result.classList.add("hidden");
+
+    try {
+
+        const response = await fetch(
+            `${API_URL}/analyze/repository`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    repo_url: url
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Repository analysis failed."
+            );
+        }
+
+        displayResults(data);
+
+        statusText.textContent =
+            "Repository analysis completed.";
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusText.textContent =
+            `Error: ${error.message}`;
+
+    } finally {
+
+        analyzeBtn.disabled = false;
+
+    }
+}
+
+
+function displayResults(data) {
+
+    result.classList.remove("hidden");
+
+    overallScore.textContent =
+        data.overall_score ?? "--";
+
+    components.innerHTML = "";
+
+    const sections = [
+        {
+            name: "Docker",
+            key: "docker"
+        },
+        {
+            name: "Kubernetes",
+            key: "kubernetes"
+        },
+        {
+            name: "Terraform",
+            key: "terraform"
+        },
+        {
+            name: "Helm",
+            key: "helm"
+        },
+        {
+            name: "Jenkins",
+            key: "jenkins"
+        }
+    ];
+
+    sections.forEach(section => {
+
+        const dataSection = data[section.key];
+
+        if (!dataSection) {
+            return;
+        }
+
+        const card = document.createElement("div");
+
+        card.className = "component";
+
+        const score =
+            dataSection.score ?? "N/A";
+
+        const issues =
+            dataSection.issues ?? [];
+
+        card.innerHTML = `
+            <h3>${section.name}</h3>
+
+            <div class="component-score">
+                Score: ${score}
+            </div>
+
+            <strong>Issues</strong>
+
+            ${
+                issues.length
+                    ? `
+                        <ul>
+                            ${issues.map(issue =>
+                                `<li>${escapeHtml(issue)}</li>`
+                            ).join("")}
+                        </ul>
+                      `
+                    : "<p>No issues found.</p>"
+            }
+        `;
+
+        components.appendChild(card);
+
+    });
+}
+
+
+function escapeHtml(value) {
+
+    const div = document.createElement("div");
+
+    div.textContent = value;
+
+    return div.innerHTML;
+}

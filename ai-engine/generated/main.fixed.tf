@@ -1,4 +1,5 @@
-===== versions.tf =====
+```hcl
+# ===== versions.tf =====
 
 terraform {
   required_version = ">= 1.7.0, < 2.0.0"
@@ -6,13 +7,13 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.88.0"
+      version = "~> 5.50.0"
     }
   }
 }
 
 
-===== provider.tf =====
+# ===== provider.tf =====
 
 provider "aws" {
   region = var.aws_region
@@ -23,7 +24,7 @@ provider "aws" {
 }
 
 
-===== locals.tf =====
+# ===== locals.tf =====
 
 locals {
   common_tags = {
@@ -33,79 +34,32 @@ locals {
     Owner       = "Manish Gowda"
   }
 
-  az_names = data.aws_availability_zones.available.names
+  azs = ["${var.aws_region}a", "${var.aws_region}b"]
 }
 
 
-===== data.tf =====
-
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-data "aws_ami" "amazon_linux_2023" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-2023*-x86_64"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
-data "aws_iam_policy_document" "s3_tls_only" {
-  statement {
-    sid    = "AllowSSLRequestsOnly"
-    effect = "Deny"
-
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    actions = ["s3:*"]
-
-    resources = [
-      aws_s3_bucket.artifacts.arn,
-      "${aws_s3_bucket.artifacts.arn}/*"
-    ]
-
-    condition {
-      test     = "Bool"
-      variable = "aws:SecureTransport"
-      values   = ["false"]
-    }
-  }
-}
-
-
-===== variables.tf =====
+# ===== variables.tf =====
 
 variable "aws_region" {
-  description = "AWS Region for deployment"
+  description = "AWS Region for infrastructure deployment"
   type        = string
   default     = "ap-south-1"
 }
 
 variable "project_name" {
-  description = "Project name tag and naming prefix"
+  description = "Project Name identifier"
   type        = string
   default     = "ai-platform"
 }
 
 variable "environment" {
-  description = "Deployment environment (dev, staging, prod)"
+  description = "Deployment Environment (dev, staging, prod)"
   type        = string
   default     = "dev"
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
+  description = "EC2 Instance Type"
   type        = string
   default     = "t3.micro"
 }
@@ -115,52 +69,40 @@ variable "bucket_name" {
   type        = string
 }
 
-variable "allowed_cidr_blocks" {
-  description = "Allowed CIDR blocks for inbound web traffic"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC"
+  type        = string
+  default     = "10.0.0.0/16"
 }
 
 
-===== networking.tf =====
+# ===== data.tf =====
 
-resource "aws_ebs_encryption_by_default" "enabled" {
-  enabled = true
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
 }
+
+
+# ===== networking.tf =====
 
 resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
   tags = {
     Name = "${var.project_name}-vpc"
-  }
-}
-
-resource "aws_subnet" "public" {
-  count                   = 2
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 4, count.index)
-  availability_zone       = local.az_names[count.index]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "${var.project_name}-public-subnet-${count.index + 1}"
-    Type = "Public"
-  }
-}
-
-resource "aws_subnet" "private" {
-  count                   = 2
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 4, count.index + 2)
-  availability_zone       = local.az_names[count.index]
-  map_public_ip_on_launch = false
-
-  tags = {
-    Name = "${var.project_name}-private-subnet-${count.index + 1}"
-    Type = "Private"
   }
 }
 
@@ -172,6 +114,32 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
+# Multi-AZ Public Subnets
+resource "aws_subnet" "public" {
+  count                   = length(local.azs)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index)
+  availability_zone       = local.azs[count.index]
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.project_name}-public-subnet-${count.index + 1}"
+  }
+}
+
+# Multi-AZ Private Subnets for secure workloads
+resource "aws_subnet" "private" {
+  count             = length(local.azs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index + 8)
+  availability_zone = local.azs[count.index]
+
+  tags = {
+    Name = "${var.project_name}-private-subnet-${count.index + 1}"
+  }
+}
+
+# Cost-Optimized Single NAT Gateway for private outbound connectivity
 resource "aws_eip" "nat" {
   domain     = "vpc"
   depends_on = [aws_internet_gateway.igw]
@@ -181,13 +149,12 @@ resource "aws_eip" "nat" {
   }
 }
 
-# Cost-Optimized single NAT Gateway for multi-AZ private outbound internet access
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id
 
   tags = {
-    Name = "${var.project_name}-nat"
+    Name = "${var.project_name}-nat-gw"
   }
 
   depends_on = [aws_internet_gateway.igw]
@@ -206,12 +173,6 @@ resource "aws_route_table" "public" {
   }
 }
 
-resource "aws_route_table_association" "public" {
-  count          = 2
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
-
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
@@ -225,14 +186,49 @@ resource "aws_route_table" "private" {
   }
 }
 
+resource "aws_route_table_association" "public" {
+  count          = length(aws_subnet.public)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
 resource "aws_route_table_association" "private" {
-  count          = 2
+  count          = length(aws_subnet.private)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
 
 
-===== iam.tf =====
+# ===== security.tf =====
+
+resource "aws_security_group" "ai_platform" {
+  name        = "${var.project_name}-app-sg"
+  description = "Security group for AI Platform application instances"
+  vpc_id      = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-app-sg"
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "app_fastapi" {
+  security_group_id = aws_security_group.ai_platform.id
+  description       = "Allow FastAPI ingress from internal VPC"
+  from_port         = 8000
+  to_port           = 8000
+  ip_protocol       = "tcp"
+  cidr_ipv4         = var.vpc_cidr
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_outbound_all" {
+  security_group_id = aws_security_group.ai_platform.id
+  description       = "Allow outbound connection for updates and AWS services"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+
+# ===== iam.tf =====
 
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_name}-ec2-role"
@@ -249,22 +245,18 @@ resource "aws_iam_role" "ec2_role" {
       }
     ]
   })
-
-  tags = {
-    Name = "${var.project_name}-ec2-role"
-  }
 }
 
-# Attach SSM policy to eliminate the need for SSH keys & public IP access
-resource "aws_iam_role_policy_attachment" "ssm_policy" {
+# Attach AWS Systems Manager (SSM) policy to avoid direct SSH access
+resource "aws_iam_role_policy_attachment" "ssm_managed" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# Least-privilege policy for S3 bucket access
+# Least-privilege S3 bucket policy
 resource "aws_iam_policy" "s3_access" {
   name        = "${var.project_name}-s3-access-policy"
-  description = "Least privilege S3 policy for AI Platform application"
+  description = "Least-privilege policy for AI Platform artifacts S3 access"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -285,80 +277,35 @@ resource "aws_iam_policy" "s3_access" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "s3_access_attachment" {
+resource "aws_iam_role_policy_attachment" "s3_access_attach" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = aws_iam_policy.s3_access.arn
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.project_name}-ec2-instance-profile"
+  name = "${var.project_name}-ec2-profile"
   role = aws_iam_role.ec2_role.name
 }
 
 
-===== security.tf =====
-
-resource "aws_security_group" "ai_platform" {
-  name        = "${var.project_name}-app-sg"
-  description = "Security group for AI Platform Application running in Private Subnet"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description = "HTTP Traffic"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_cidr_blocks
-  }
-
-  ingress {
-    description = "HTTPS Traffic"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_cidr_blocks
-  }
-
-  ingress {
-    description = "FastAPI Internal API"
-    from_port   = 8000
-    to_port     = 8000
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
-  }
-
-  egress {
-    description = "HTTPS Egress for AWS APIs and updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "HTTP Egress for Linux package updates"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.project_name}-app-sg"
-  }
-}
-
-
-===== compute.tf =====
+# ===== compute.tf =====
 
 resource "aws_instance" "ai_platform" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = var.instance_type
-  subnet_id            = aws_subnet.private[0].id
-  vpc_security_group_ids = [aws_security_group.ai_platform.id]
-  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
-
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.private[0].id
+  vpc_security_group_ids      = [aws_security_group.ai_platform.id]
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = false
+  ebs_optimized               = true
+
+  root_block_device {
+    encrypted             = true
+    kms_key_id            = aws_kms_key.ebs_key.arn
+    volume_type           = "gp3"
+    volume_size           = 20
+    delete_on_termination = true
+  }
 
   metadata_options {
     http_tokens                 = "required"
@@ -366,24 +313,23 @@ resource "aws_instance" "ai_platform" {
     instance_metadata_tags      = "enabled"
   }
 
-  root_block_device {
-    volume_type           = "gp3"
-    volume_size           = 20
-    encrypted             = true
-    delete_on_termination = true
-
-    tags = {
-      Name = "${var.project_name}-root-volume"
-    }
-  }
-
   tags = {
     Name = "${var.project_name}-ec2"
   }
 }
 
+resource "aws_kms_key" "ebs_key" {
+  description             = "KMS key for EC2 EBS root volume encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
 
-===== storage.tf =====
+  tags = {
+    Name = "${var.project_name}-ebs-kms-key"
+  }
+}
+
+
+# ===== storage.tf =====
 
 resource "aws_s3_bucket" "artifacts" {
   bucket        = var.bucket_name
@@ -394,18 +340,9 @@ resource "aws_s3_bucket" "artifacts" {
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
+resource "aws_s3_bucket_public_access_block" "artifacts" {
   bucket = aws_s3_bucket.artifacts.id
 
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "artifacts" {
-  bucket                  = aws_s3_bucket.artifacts.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -420,6 +357,28 @@ resource "aws_s3_bucket_versioning" "artifacts" {
   }
 }
 
+resource "aws_kms_key" "s3_key" {
+  description             = "KMS key for S3 bucket encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "${var.project_name}-s3-kms-key"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.s3_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   bucket = aws_s3_bucket.artifacts.id
 
@@ -427,9 +386,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
     id     = "archive-noncurrent-versions"
     status = "Enabled"
 
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
+    noncurrent_version_transition {
+      noncurrent_days = 30
+      storage_class   = "STANDARD_IA"
     }
 
     noncurrent_version_expiration {
@@ -438,29 +397,42 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   }
 }
 
-resource "aws_s3_bucket_policy" "artifacts_tls" {
+resource "aws_s3_bucket_policy" "enforce_tls" {
   bucket = aws_s3_bucket.artifacts.id
-  policy = data.aws_iam_policy_document.s3_tls_only.json
 
-  depends_on = [aws_s3_bucket_public_access_block.artifacts]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnforceTLSRequestsOnly"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.artifacts.arn,
+          "${aws_s3_bucket.artifacts.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
 }
 
 
-===== outputs.tf =====
+# ===== outputs.tf =====
 
 output "vpc_id" {
-  description = "VPC ID"
+  description = "ID of the VPC"
   value       = aws_vpc.main.id
 }
 
-output "private_subnet_ids" {
-  description = "IDs of the private subnets"
-  value       = aws_subnet.private[*].id
-}
-
-output "public_subnet_ids" {
-  description = "IDs of the public subnets"
-  value       = aws_subnet.public[*].id
+output "instance_private_ip" {
+  description = "Private IP address of the EC2 instance"
+  value       = aws_instance.ai_platform.private_ip
 }
 
 output "instance_id" {
@@ -468,13 +440,13 @@ output "instance_id" {
   value       = aws_instance.ai_platform.id
 }
 
-output "instance_private_ip" {
-  description = "EC2 Instance Private IP"
-  value       = aws_instance.ai_platform.private_ip
+output "ssm_connect_command" {
+  description = "AWS CLI Command to securely connect via SSM"
+  value       = "aws ssm start-session --target ${aws_instance.ai_platform.id} --region ${var.aws_region}"
 }
 
 output "s3_bucket_name" {
-  description = "Name of the S3 artifacts bucket"
+  description = "Name of the secure S3 artifacts bucket"
   value       = aws_s3_bucket.artifacts.bucket
 }
 
@@ -482,3 +454,4 @@ output "s3_bucket_arn" {
   description = "ARN of the S3 artifacts bucket"
   value       = aws_s3_bucket.artifacts.arn
 }
+```

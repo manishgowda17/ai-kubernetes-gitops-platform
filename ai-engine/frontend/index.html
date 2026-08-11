@@ -1,161 +1,885 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>AI Platform Engineering Copilot</title>
 
     <link rel="stylesheet" href="style.css">
-
 </head>
 
 <body>
 
-<div class="container">
+<div class="app">
 
-    <header>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
 
-        <h1>🚀 AI Platform Engineering Copilot</h1>
-
-        <p>Analyze • Fix • Optimize Infrastructure</p>
-
-    </header>
-
-
-    <div class="repository-card">
-
-        <h2>Repository</h2>
-
-        <input
-             id="repo-url"
-             type="text"
-             placeholder="Paste GitHub Repository URL">
-            readonly>
-
-        <button id="analyze-btn">
-
-            Analyze Repository
-
-        </button>
-
-    </div>
-
-
-    <div id="dashboard" class="hidden">
-
-        <div class="score-card">
-
-            <h2>Infrastructure Health</h2>
-
-            <h1 id="overall-score">--</h1>
-
-            <p id="health-status">Waiting for Analysis</p>
-
+        <div class="brand">
+            <div class="brand-icon">⚡</div>
+            <div>
+                <h2>Platform Copilot</h2>
+                <span>DevOps Intelligence</span>
+            </div>
         </div>
 
+        <nav>
 
-
-        <div class="cards">
-
-            <div class="card">
-
-                <h3>🐳 Docker</h3>
-
-                <h2 id="docker-score">--</h2>
-
-            </div>
-
-            <div class="card">
-
-                <h3>🌍 Terraform</h3>
-
-                <h2 id="terraform-score">--</h2>
-
-            </div>
-
-            <div class="card">
-
-                <h3>☸ Kubernetes</h3>
-
-                <h2 id="kubernetes-score">--</h2>
-
-            </div>
-
-            <div class="card">
-
-                <h3>⚓ Helm</h3>
-
-                <h2 id="helm-score">--</h2>
-
-            </div>
-
-            <div class="card">
-
-                <h3>⚙ Jenkins</h3>
-
-                <h2 id="jenkins-score">--</h2>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="summary-card">
-
-            <h2>Repository Summary</h2>
-
-            <ul id="summary-list">
-
-            </ul>
-
-        </div>
-
-
-
-        <div class="recommendation-card">
-
-            <h2>AI Recommendations</h2>
-
-            <ul id="recommendation-list">
-
-            </ul>
-
-        </div>
-
-
-        <div class="buttons">
-
-            <button id="fix-btn">
-
-                Generate AI Fixes
-
+            <button class="nav-item active" data-section="overview">
+                <span>◈</span>
+                Overview
             </button>
 
-            <button id="download-btn">
-
-                Download Fixed Repository
-
+            <button class="nav-item" data-section="repository">
+                <span>⌘</span>
+                Repository
             </button>
+
+            <button class="nav-item" data-section="analysis">
+                <span>◉</span>
+                Analysis
+            </button>
+
+            <button class="nav-item" data-section="fixes">
+                <span>⚙</span>
+                AI Fixes
+            </button>
+
+            <button class="nav-item" data-section="monitoring">
+                <span>◌</span>
+                Monitoring
+            </button>
+
+            <button class="nav-item" data-section="kubernetes">
+                <span>⎈</span>
+                Kubernetes
+            </button>
+
+            <button class="nav-item" data-section="incidents">
+                <span>⚠</span>
+                Incidents
+            </button>
+
+        </nav>
+
+        <div class="sidebar-bottom">
+
+            <div class="api-status">
+                <span id="apiDot" class="status-dot offline"></span>
+
+                <div>
+                    <strong>API Status</strong>
+                    <small id="apiStatus">Checking...</small>
+                </div>
+            </div>
+
+            <div class="version">
+                v1.0.0
+            </div>
 
         </div>
 
-    </div>
+    </aside>
+
+
+    <!-- MAIN -->
+    <main class="main">
+
+        <!-- TOP BAR -->
+        <header class="topbar">
+
+            <div>
+                <h1 id="pageTitle">Overview</h1>
+                <p id="pageSubtitle">
+                    AI-powered DevOps and platform engineering analysis
+                </p>
+            </div>
+
+            <div class="top-actions">
+
+                <button class="icon-button" id="refreshBtn">
+                    ↻
+                </button>
+
+                <span id="lastUpdated">
+                    Not analyzed yet
+                </span>
+
+            </div>
+
+        </header>
+
+
+        <!-- ================================================= -->
+        <!-- OVERVIEW -->
+        <!-- ================================================= -->
+
+        <section id="overview" class="page active">
+
+            <div class="hero">
+
+                <div>
+                    <span class="eyebrow">PLATFORM ENGINEERING COPILOT</span>
+
+                    <h2>
+                        Analyze, monitor and improve
+                        your DevOps infrastructure.
+                    </h2>
+
+                    <p>
+                        Analyze GitHub repositories, inspect infrastructure,
+                        monitor services and generate AI-powered fixes.
+                    </p>
+                </div>
+
+                <div class="hero-symbol">
+                    ⎈
+                </div>
+
+            </div>
+
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+                    <span>Overall Score</span>
+                    <strong id="overviewScore">--</strong>
+                    <small>Repository health</small>
+                </div>
+
+                <div class="stat-card">
+                    <span>Issues Found</span>
+                    <strong id="issueCount">--</strong>
+                    <small>Across analyzed components</small>
+                </div>
+
+                <div class="stat-card">
+                    <span>API</span>
+                    <strong id="overviewApi">--</strong>
+                    <small>Backend availability</small>
+                </div>
+
+                <div class="stat-card">
+                    <span>Last Analysis</span>
+                    <strong id="overviewTime">--</strong>
+                    <small>Repository analysis</small>
+                </div>
+
+            </div>
+
+
+            <div class="quick-grid">
+
+                <div class="panel quick-card">
+
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-label">START HERE</span>
+                            <h3>Repository Analysis</h3>
+                        </div>
+                    </div>
+
+                    <p>
+                        Enter a public GitHub repository and analyze
+                        its DevOps configuration.
+                    </p>
+
+                    <button
+                        class="primary-btn"
+                        data-goto="repository"
+                    >
+                        Analyze Repository →
+                    </button>
+
+                </div>
+
+
+                <div class="panel quick-card">
+
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-label">OPERATIONS</span>
+                            <h3>Infrastructure Monitoring</h3>
+                        </div>
+                    </div>
+
+                    <p>
+                        Inspect Prometheus, monitoring and
+                        live Kubernetes information.
+                    </p>
+
+                    <button
+                        class="secondary-btn"
+                        data-goto="monitoring"
+                    >
+                        Open Monitoring
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- REPOSITORY -->
+        <!-- ================================================= -->
+
+        <section id="repository" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">REPOSITORY</span>
+
+                <h2>Analyze GitHub Repository</h2>
+
+                <p>
+                    Provide a GitHub repository URL to analyze its
+                    DevOps and cloud configuration.
+                </p>
+
+            </div>
+
+
+            <div class="panel repository-box">
+
+                <label for="repoUrl">
+                    GitHub Repository URL
+                </label>
+
+                <div class="repo-input">
+
+                    <input
+                        id="repoUrl"
+                        type="text"
+                        placeholder="https://github.com/user/repository"
+                    >
+
+                    <button
+                        id="analyzeBtn"
+                        class="primary-btn"
+                    >
+                        Analyze Repository
+                    </button>
+
+                </div>
+
+                <div id="analysisStatus" class="message"></div>
+
+            </div>
+
+
+            <div id="repositorySummary" class="hidden">
+
+                <div class="score-main panel">
+
+                    <div>
+                        <span class="panel-label">
+                            OVERALL SCORE
+                        </span>
+
+                        <h2 id="overallScore">
+                            --
+                        </h2>
+                    </div>
+
+                    <div class="score-ring">
+                        <span id="scoreRingValue">--</span>
+                    </div>
+
+                </div>
+
+
+                <div id="componentScores" class="score-grid"></div>
+
+
+                <div class="panel">
+
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-label">
+                                FINDINGS
+                            </span>
+
+                            <h3>Issues Detected</h3>
+                        </div>
+                    </div>
+
+                    <div id="issuesContainer">
+                    </div>
+
+                </div>
+
+
+                <div class="panel">
+
+                    <div class="panel-header">
+
+                        <div>
+                            <span class="panel-label">
+                                RECOMMENDATIONS
+                            </span>
+
+                            <h3>Suggested Improvements</h3>
+                        </div>
+
+                    </div>
+
+                    <div id="recommendationsContainer">
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- ANALYSIS -->
+        <!-- ================================================= -->
+
+        <section id="analysis" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">ANALYSIS</span>
+
+                <h2>Infrastructure Analysis</h2>
+
+                <p>
+                    Run individual analyzers against the configured repository.
+                </p>
+
+            </div>
+
+
+            <div class="tool-grid">
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">🐳</span>
+
+                    <h3>Docker</h3>
+
+                    <p>Analyze Dockerfile configuration.</p>
+
+                    <button
+                        class="secondary-btn analyzer-btn"
+                        data-endpoint="/analyze/docker"
+                        data-name="Docker"
+                    >
+                        Analyze
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">⎈</span>
+
+                    <h3>Kubernetes</h3>
+
+                    <p>Inspect Kubernetes manifests.</p>
+
+                    <button
+                        class="secondary-btn analyzer-btn"
+                        data-endpoint="/analyze/kubernetes"
+                        data-name="Kubernetes"
+                    >
+                        Analyze
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">◇</span>
+
+                    <h3>Helm</h3>
+
+                    <p>Analyze Helm chart configuration.</p>
+
+                    <button
+                        class="secondary-btn analyzer-btn"
+                        data-endpoint="/analyze/helm"
+                        data-name="Helm"
+                    >
+                        Analyze
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">J</span>
+
+                    <h3>Jenkins</h3>
+
+                    <p>Analyze Jenkins pipeline configuration.</p>
+
+                    <button
+                        class="secondary-btn analyzer-btn"
+                        data-endpoint="/analyze/jenkins"
+                        data-name="Jenkins"
+                    >
+                        Analyze
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="panel analysis-output">
+
+                <div class="panel-header">
+
+                    <div>
+                        <span class="panel-label">
+                            ANALYZER OUTPUT
+                        </span>
+
+                        <h3 id="analysisOutputTitle">
+                            No analysis selected
+                        </h3>
+                    </div>
+
+                </div>
+
+                <pre id="analysisOutput">
+Run an analyzer to view results.
+                </pre>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- AI FIXES -->
+        <!-- ================================================= -->
+
+        <section id="fixes" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">AI AUTOMATION</span>
+
+                <h2>AI Fixes</h2>
+
+                <p>
+                    Generate improved configuration files using
+                    your backend fixers.
+                </p>
+
+            </div>
+
+
+            <div class="fix-all-box panel">
+
+                <div>
+
+                    <span class="panel-label">
+                        AUTOMATION
+                    </span>
+
+                    <h3>Generate All Fixes</h3>
+
+                    <p>
+                        Run all available fixers.
+                    </p>
+
+                </div>
+
+                <button
+                    id="fixAllBtn"
+                    class="primary-btn"
+                >
+                    Generate All Fixes
+                </button>
+
+            </div>
+
+
+            <div class="tool-grid">
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">🐳</span>
+
+                    <h3>Docker Fix</h3>
+
+                    <p>Generate an improved Dockerfile.</p>
+
+                    <button
+                        class="secondary-btn fixer-btn"
+                        data-endpoint="/fix/docker"
+                        data-name="Docker"
+                    >
+                        Generate Fix
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">⎈</span>
+
+                    <h3>Kubernetes Fix</h3>
+
+                    <p>Generate improved Kubernetes manifests.</p>
+
+                    <button
+                        class="secondary-btn fixer-btn"
+                        data-endpoint="/fix/kubernetes"
+                        data-name="Kubernetes"
+                    >
+                        Generate Fix
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">◇</span>
+
+                    <h3>Terraform Fix</h3>
+
+                    <p>Generate improved Terraform configuration.</p>
+
+                    <button
+                        class="secondary-btn fixer-btn"
+                        data-endpoint="/fix/terraform"
+                        data-name="Terraform"
+                    >
+                        Generate Fix
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">H</span>
+
+                    <h3>Helm Fix</h3>
+
+                    <p>Generate improved Helm configuration.</p>
+
+                    <button
+                        class="secondary-btn fixer-btn"
+                        data-endpoint="/fix/helm"
+                        data-name="Helm"
+                    >
+                        Generate Fix
+                    </button>
+
+                </div>
+
+
+                <div class="tool-card">
+
+                    <span class="tool-icon">J</span>
+
+                    <h3>Jenkins Fix</h3>
+
+                    <p>Generate an improved Jenkinsfile.</p>
+
+                    <button
+                        class="secondary-btn fixer-btn"
+                        data-endpoint="/fix/jenkins"
+                        data-name="Jenkins"
+                    >
+                        Generate Fix
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div id="fixOutput" class="panel hidden">
+
+                <span class="panel-label">
+                    FIX RESULT
+                </span>
+
+                <div id="fixMessage">
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- MONITORING -->
+        <!-- ================================================= -->
+
+        <section id="monitoring" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">OBSERVABILITY</span>
+
+                <h2>Monitoring</h2>
+
+                <p>
+                    Monitor your platform using Prometheus,
+                    Grafana, Node Exporter and cAdvisor.
+                </p>
+
+            </div>
+
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+
+                    <span>Prometheus</span>
+
+                    <strong class="service-status">
+                        ●
+                    </strong>
+
+                    <small>
+                        Metrics collection
+                    </small>
+
+                </div>
+
+
+                <div class="stat-card">
+
+                    <span>Grafana</span>
+
+                    <strong class="service-status">
+                        ●
+                    </strong>
+
+                    <small>
+                        Visualization
+                    </small>
+
+                </div>
+
+
+                <div class="stat-card">
+
+                    <span>Node Exporter</span>
+
+                    <strong class="service-status">
+                        ●
+                    </strong>
+
+                    <small>
+                        Host metrics
+                    </small>
+
+                </div>
+
+
+                <div class="stat-card">
+
+                    <span>cAdvisor</span>
+
+                    <strong class="service-status">
+                        ●
+                    </strong>
+
+                    <small>
+                        Container metrics
+                    </small>
+
+                </div>
+
+            </div>
+
+
+            <div class="monitor-actions">
+
+                <button
+                    id="monitorBtn"
+                    class="primary-btn"
+                >
+                    Run Monitoring Analysis
+                </button>
+
+                <button
+                    id="metricsBtn"
+                    class="secondary-btn"
+                >
+                    View API Metrics
+                </button>
+
+            </div>
+
+
+            <div class="panel">
+
+                <div class="panel-header">
+
+                    <div>
+                        <span class="panel-label">
+                            MONITORING OUTPUT
+                        </span>
+
+                        <h3>Current Analysis</h3>
+                    </div>
+
+                </div>
+
+                <pre id="monitorOutput">
+Run monitoring analysis to view results.
+                </pre>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- KUBERNETES -->
+        <!-- ================================================= -->
+
+        <section id="kubernetes" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">
+                    KUBERNETES
+                </span>
+
+                <h2>Live Cluster Analysis</h2>
+
+                <p>
+                    Analyze the currently connected Kubernetes cluster.
+                </p>
+
+            </div>
+
+
+            <div class="panel cluster-panel">
+
+                <div class="cluster-icon">
+                    ⎈
+                </div>
+
+                <div>
+
+                    <h3>
+                        Live Kubernetes Cluster
+                    </h3>
+
+                    <p>
+                        Fetch the current cluster analysis from
+                        the backend.
+                    </p>
+
+                    <button
+                        id="kubernetesBtn"
+                        class="primary-btn"
+                    >
+                        Analyze Live Cluster
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="panel">
+
+                <span class="panel-label">
+                    CLUSTER OUTPUT
+                </span>
+
+                <pre id="kubernetesOutput">
+No cluster analysis performed.
+                </pre>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- INCIDENTS -->
+        <!-- ================================================= -->
+
+        <section id="incidents" class="page">
+
+            <div class="section-heading">
+
+                <span class="panel-label">
+                    INCIDENT MANAGEMENT
+                </span>
+
+                <h2>Incident Report</h2>
+
+                <p>
+                    Generate an incident report from the monitoring analyzer.
+                </p>
+
+            </div>
+
+
+            <div class="panel incident-panel">
+
+                <div>
+
+                    <span class="severity">
+                        SYSTEM ANALYSIS
+                    </span>
+
+                    <h3>
+                        Generate Current Incident Report
+                    </h3>
+
+                    <p>
+                        Analyze current monitoring conditions
+                        and generate a report.
+                    </p>
+
+                </div>
+
+                <button
+                    id="incidentBtn"
+                    class="primary-btn"
+                >
+                    Generate Report
+                </button>
+
+            </div>
+
+
+            <div class="panel">
+
+                <span class="panel-label">
+                    INCIDENT REPORT
+                </span>
+
+                <pre id="incidentOutput">
+No incident report generated.
+                </pre>
+
+            </div>
+
+        </section>
+
+    </main>
 
 </div>
 
 <script src="script.js"></script>
 
 </body>
-
 </html>
-</button>
-<div id="loader" class="loader">
-
-⏳ Analyzing Repository...
-
-</div>

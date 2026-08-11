@@ -1,72 +1,117 @@
-### `values.yaml`
+===== values.yaml =====
 
 ```yaml
+# Default values for ai-platform.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Production high-availability default
 replicaCount: 2
 
+# Deployment revision history limit
+revisionHistoryLimit: 10
+
+# Image configuration
 image:
   repository: nginx
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "1.25.3-alpine"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# ServiceAccount configuration
 serviceAccount:
+  # Specifies whether a service account should be created
   create: true
+  # Automatically mount a ServiceAccount's API credentials (disabled by default for security principle of least privilege)
+  automount: false
+  # Annotations to add to the service account
   annotations: {}
+  # The name of the service account to use.
   name: ""
 
 podAnnotations: {}
 podLabels: {}
 
+# Security contexts with baseline hardened defaults
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 101
-  runAsGroup: 101
-  fsGroup: 101
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
   capabilities:
     drop:
       - ALL
 
+# Service configuration
 service:
   type: ClusterIP
   port: 80
+  targetPort: 80
+  annotations: {}
 
+# Ingress configuration
 ingress:
   enabled: false
-  className: "nginx"
+  className: ""
   annotations: {}
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
-    - host: app.example.com
+    - host: chart-example.local
       paths:
         - path: /
           pathType: Prefix
   tls: []
-  #  - secretName: app-example-tls
-  #    hosts:
-  #      - app.example.com
 
+# Gateway API HTTPRoute configuration
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+    - name: gateway
+      sectionName: http
+  hostnames:
+    - chart-example.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+
+# Resource requests and limits for predictable scheduling and preventing noisy neighbors
 resources:
   limits:
-    cpu: 250m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
   requests:
     cpu: 100m
     memory: 128Mi
+
+# Container Probes
+startupProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 30
 
 livenessProbe:
   httpGet:
     path: /
     port: http
   initialDelaySeconds: 15
-  periodSeconds: 10
+  periodSeconds: 20
   timeoutSeconds: 5
   failureThreshold: 3
 
@@ -75,48 +120,56 @@ readinessProbe:
     path: /
     port: http
   initialDelaySeconds: 5
-  periodSeconds: 5
+  periodSeconds: 10
   timeoutSeconds: 3
   failureThreshold: 3
 
+# Horizontal Pod Autoscaler configuration
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+terminationGracePeriodSeconds: 30
+
+# Additional storage and configuration
+volumes: []
+volumeMounts: []
+
+# Scheduling rules
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
-
 topologySpreadConstraints: []
 ```
 
----
-
-### `templates/deployment.yaml`
+===== deployment.yaml =====
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "app.fullname" . }}
+  name: {{ include "ai-platform.fullname" . }}
   labels:
-    {{- include "app.labels" . | nindent 4 }}
+    {{- include "ai-platform.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 25%
-      maxUnavailable: 0
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 10 }}
   selector:
     matchLabels:
-      {{- include "app.selectorLabels" . | nindent 6 }}
+      {{- include "ai-platform.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
       annotations:
-        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
       labels:
-        {{- include "app.selectorLabels" . | nindent 8 }}
+        {{- include "ai-platform.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -125,29 +178,50 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "app.serviceAccountName" . }}
+      serviceAccountName: {{ include "ai-platform.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: {{ .Values.service.targetPort | default .Values.service.port }}
               protocol: TCP
-          {{- if .Values.livenessProbe }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.readinessProbe }}
+          {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.resources }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -166,17 +240,15 @@ spec:
       {{- end }}
 ```
 
----
-
-### `templates/service.yaml`
+===== service.yaml =====
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "app.fullname" . }}
+  name: {{ include "ai-platform.fullname" . }}
   labels:
-    {{- include "app.labels" . | nindent 4 }}
+    {{- include "ai-platform.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -185,32 +257,30 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: {{ .Values.service.targetPort | default "http" }}
       protocol: TCP
       name: http
   selector:
-    {{- include "app.selectorLabels" . | nindent 4 }}
+    {{- include "ai-platform.selectorLabels" . | nindent 4 }}
 ```
 
----
-
-### `templates/ingress.yaml`
+===== ingress.yaml =====
 
 ```yaml
 {{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "app.fullname" . }}
+  name: {{ include "ai-platform.fullname" . }}
   labels:
-    {{- include "app.labels" . | nindent 4 }}
+    {{- include "ai-platform.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
   {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
@@ -232,9 +302,9 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ include "app.fullname" $ }}
+                name: {{ include "ai-platform.fullname" $ }}
                 port:
-                  name: http
+                  number: {{ $.Values.service.port }}
           {{- end }}
     {{- end }}
 {{- end }}
